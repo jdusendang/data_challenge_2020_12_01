@@ -1,0 +1,90 @@
+---
+title: "Data Challenge"
+author: "Jennifer Dusendang"
+date: "12/14/2019"
+output: html_document
+
+
+Prior to 1990 did docs who passed their on their intitial try have better evaluation scores?
+
+```{r a}
+#read in data 
+library(questionr)
+library(ggplot2)
+docinfo <- read.csv("C:/Users/jduse_000/Documents/xx/match_data.csv") 
+docscores <- read.csv("C:/Users/jduse_000/Documents/xx/match_data_year_data.csv")
+
+#merge datasets 
+fulldata <- merge(docinfo, docscores, by.x="physician_uid")
+
+#define pass / fail groups 
+#if their residency year = certification year then we assume initial passing 
+#first only consider those with certification ending before 1989 (need one year of data)
+before1990 <- fulldata[which(fulldata$board_cert_year < 1989),]
+
+before1990$initial_exam <- ifelse(before1990$training_year == before1990$board_cert_year, "PASSED", "FAILED")
+
+sum(before1990$initial_exam == 'PASSED')
+sum(before1990$initial_exam == 'FAILED')
+before1990$guideline_risk <- rowMeans(before1990[, c(4:35)], na.rm = TRUE)
+
+#ttest 
+t.test(before1990$guideline_risk~before1990$initial_exam)
+
+```
+
+Look at initial evaluation score to see if docs after the change had higher initial evaluation scores 
+
+```{r b}
+
+#changes to certification process 
+
+#initial evaluation score 
+for (row in 1:nrow(fulldata)){
+  mylist <- as.numeric(fulldata[row, 4:35])
+  myfirst <- gdata::first(na.omit(mylist))
+  fulldata[row,36] <- myfirst
+}
+fulldata <- questionr::rename.variable(fulldata, "V36", "initial_score")
+fulldata$prepost <- ifelse(fulldata$board_cert_year < 1990, "PRE", "POST")
+t.test(fulldata$initial_score~fulldata$prepost)
+
+
+```
+
+Did recertification help in increasing scores?
+
+```{r c}
+
+#av performance score by year for graph 
+fulldata$guideline_risk <- rowMeans(fulldata[, c(4:35)], na.rm = TRUE)
+fulldata$prepost <- ifelse(fulldata$board_cert_year < 1990, "PRE", "POST")
+t.test(fulldata$guideline_risk~fulldata$prepost)
+min(fulldata[which(fulldata$prepost == "PRE"),]$guideline_risk)
+min(fulldata[which(fulldata$prepost == "POST"),]$guideline_risk)
+
+ggplot(data = fulldata, aes(x = factor(board_cert_year), y = guideline_risk, ymin = 0, ymax = 100)) + stat_summary(fun.y="mean", geom="point", size = 3) + xlab("Board Certification Year") + ylab("Average of Evaluation Scores Over Physician's Career") + theme_classic() 
+
+#av performance score by those who failed recertification 
+after1990 <- fulldata[which(fulldata$board_cert_year >= 1990),]
+after1990$activeyears <- rowSums(!is.na(after1990[, c(4:35)]))
+after1990$contcertified <- ifelse(after1990$activeyears == 2002 - after1990$board_cert_year, "CONT", "NON-CONT")
+t.test(after1990$guideline_risk~after1990$contcertified)
+
+```
+
+Did more people fail initial certification after the change?
+
+
+```{r d}
+
+#have more people failed the exam after 1990?
+fulldata$initial_exam <- ifelse(fulldata$training_year == fulldata$board_cert_year, "PASSED", "FAILED")
+table(fulldata$prepost, fulldata$initial_exam)
+
+#overall count of certified physicans by year 
+table(fulldata$board_cert_year)
+
+#overal count of number of evaluations performed by year 
+colSums(!is.na(fulldata[, c(4:35)]))
+```
